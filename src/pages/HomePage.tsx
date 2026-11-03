@@ -1,11 +1,9 @@
 import { useAppKitAccount } from '@reown/appkit/react'
 import { ConnectButton } from '../components/ConnectButton'
-import { useVisitorTracker } from '../hooks/useVisitorTracker'
 import '../App.css'
 
 export function HomePage() {
   const { address, isConnected } = useAppKitAccount()
-  useVisitorTracker()
 
   return (
     <div className="page">

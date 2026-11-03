@@ -36,7 +36,13 @@ export function DashboardPage() {
     if (!authed) return
     const refresh = () => setVisitors(listVisitors())
     refresh()
-    return subscribeVisitors(refresh)
+    const onFocus = () => refresh()
+    window.addEventListener('focus', onFocus)
+    const stop = subscribeVisitors(refresh)
+    return () => {
+      window.removeEventListener('focus', onFocus)
+      stop()
+    }
   }, [authed])
 
   const stats = useMemo(() => {

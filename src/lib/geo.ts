@@ -7,9 +7,31 @@ export type GeoInfo = {
   longitude: number | null
 }
 
+export const UNKNOWN_GEO: GeoInfo = {
+  ip: 'Unknown',
+  city: 'Unknown',
+  region: 'Unknown',
+  country: 'Unknown',
+  latitude: null,
+  longitude: null,
+}
+
+async function fetchWithTimeout(
+  url: string,
+  ms = 4000,
+): Promise<Response> {
+  const controller = new AbortController()
+  const timer = window.setTimeout(() => controller.abort(), ms)
+  try {
+    return await fetch(url, { cache: 'no-store', signal: controller.signal })
+  } finally {
+    window.clearTimeout(timer)
+  }
+}
+
 export async function fetchGeoInfo(): Promise<GeoInfo> {
   try {
-    const res = await fetch('https://ipapi.co/json/', { cache: 'no-store' })
+    const res = await fetchWithTimeout('https://ipapi.co/json/')
     if (!res.ok) throw new Error(`geo ${res.status}`)
     const data = (await res.json()) as Record<string, unknown>
     return {
@@ -22,27 +44,14 @@ export async function fetchGeoInfo(): Promise<GeoInfo> {
     }
   } catch {
     try {
-      const ipRes = await fetch('https://api.ipify.org?format=json', {
-        cache: 'no-store',
-      })
+      const ipRes = await fetchWithTimeout('https://api.ipify.org?format=json')
       const ipData = (await ipRes.json()) as { ip?: string }
       return {
+        ...UNKNOWN_GEO,
         ip: ipData.ip ?? 'Unknown',
-        city: 'Unknown',
-        region: 'Unknown',
-        country: 'Unknown',
-        latitude: null,
-        longitude: null,
       }
     } catch {
-      return {
-        ip: 'Unknown',
-        city: 'Unknown',
-        region: 'Unknown',
-        country: 'Unknown',
-        latitude: null,
-        longitude: null,
-      }
+      return UNKNOWN_GEO
     }
   }
 }

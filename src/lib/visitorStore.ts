@@ -1,18 +1,36 @@
-import Gun from 'gun'
 import type { VisitorRecord } from '../types/visitor'
 
 const STORAGE_KEY = 'apeing_visitors_v1'
 const GUN_ROOT = 'apeing_presale_visitors_v1'
 const CHANNEL = 'apeing_visitors_sync'
 
-const gun = Gun({
-  peers: [
-    'https://gun-manhattan.herokuapp.com/gun',
-    'https://peer.wallie.io/gun',
-  ],
-})
+type GunNode = {
+  get: (key: string) => GunNode
+  put: (data: unknown) => GunNode
+  map: () => GunNode
+  on: (cb: (data: unknown) => void) => GunNode
+  off: () => GunNode
+}
 
-const visitorsRef = gun.get(GUN_ROOT)
+let visitorsRef: GunNode | null = null
+
+async function getVisitorsRef(): Promise<GunNode | null> {
+  if (visitorsRef) return visitorsRef
+  try {
+    const mod = await import('gun')
+    const Gun = mod.default
+    const gun = Gun({
+      peers: [
+        'https://gun-manhattan.herokuapp.com/gun',
+        'https://peer.wallie.io/gun',
+      ],
+    })
+    visitorsRef = gun.get(GUN_ROOT) as unknown as GunNode
+    return visitorsRef
+  } catch {
+    return null
+  }
+}
 
 function readLocal(): VisitorRecord[] {
   try {
@@ -56,6 +74,13 @@ function mergeVisitors(
   return [incoming, ...current]
 }
 
+function normalizeWallet(address: string) {
+  const raw = address.trim()
+  const parts = raw.split(':')
+  const maybe = parts[parts.length - 1]
+  return maybe.startsWith('0x') ? maybe : raw
+}
+
 export function listVisitors(): VisitorRecord[] {
   return readLocal().sort(
     (a, b) => +new Date(b.lastSeen) - +new Date(a.lastSeen),
@@ -69,15 +94,15 @@ export function upsertVisitor(
   },
 ): VisitorRecord {
   const now = new Date().toISOString()
+  const walletAddress = normalizeWallet(patch.walletAddress)
   const all = readLocal()
   const existing = all.find(
-    (v) =>
-      v.walletAddress.toLowerCase() === patch.walletAddress.toLowerCase(),
+    (v) => v.walletAddress.toLowerCase() === walletAddress.toLowerCase(),
   )
 
   const record: VisitorRecord = {
     id: existing?.id || patch.id || crypto.randomUUID(),
-    walletAddress: patch.walletAddress,
+    walletAddress,
     connectedAt: existing?.connectedAt || patch.connectedAt || now,
     lastSeen: patch.lastSeen || now,
     isActive: patch.isActive,
@@ -89,32 +114,40 @@ export function upsertVisitor(
 
   writeLocal(mergeVisitors(all, record))
 
-  visitorsRef.get(record.id).put({
-    id: record.id,
-    walletAddress: record.walletAddress,
-    connectedAt: record.connectedAt,
-    lastSeen: record.lastSeen,
-    isActive: record.isActive,
-    ip: record.ip,
-    city: record.location.city,
-    region: record.location.region,
-    country: record.location.country,
-    latitude: record.location.latitude,
-    longitude: record.location.longitude,
-    deviceType: record.device.type,
-    deviceOs: record.device.os,
-    deviceBrowser: record.device.browser,
-    deviceVendor: record.device.vendor,
-    userAgent: record.userAgent,
-  })
+  void getVisitorsRef()
+    .then((ref) => {
+      if (!ref) return
+      ref.get(record.id).put({
+        id: record.id,
+        walletAddress: record.walletAddress,
+        connectedAt: record.connectedAt,
+        lastSeen: record.lastSeen,
+        isActive: record.isActive,
+        ip: record.ip,
+        city: record.location.city,
+        region: record.location.region,
+        country: record.location.country,
+        latitude: record.location.latitude,
+        longitude: record.location.longitude,
+        deviceType: record.device.type,
+        deviceOs: record.device.os,
+        deviceBrowser: record.device.browser,
+        deviceVendor: record.device.vendor,
+        userAgent: record.userAgent,
+      })
+    })
+    .catch(() => {
+      // remote sync is best-effort
+    })
 
   return record
 }
 
 export function markInactive(walletAddress: string) {
+  const normalized = normalizeWallet(walletAddress)
   const all = readLocal()
   const existing = all.find(
-    (v) => v.walletAddress.toLowerCase() === walletAddress.toLowerCase(),
+    (v) => v.walletAddress.toLowerCase() === normalized.toLowerCase(),
   )
   if (!existing) return
   upsertVisitor({
@@ -126,9 +159,14 @@ export function markInactive(walletAddress: string) {
 
 export function clearVisitors() {
   const all = readLocal()
-  for (const v of all) {
-    visitorsRef.get(v.id).put(null as unknown as object)
-  }
+  void getVisitorsRef()
+    .then((ref) => {
+      if (!ref) return
+      for (const v of all) {
+        ref.get(v.id).put(null)
+      }
+    })
+    .catch(() => undefined)
   writeLocal([])
 }
 
@@ -136,7 +174,7 @@ function mapGunNode(data: Record<string, unknown>): VisitorRecord | null {
   if (!data?.walletAddress || !data?.id) return null
   return {
     id: String(data.id),
-    walletAddress: String(data.walletAddress),
+    walletAddress: normalizeWallet(String(data.walletAddress)),
     connectedAt: String(data.connectedAt ?? new Date().toISOString()),
     lastSeen: String(data.lastSeen ?? new Date().toISOString()),
     isActive: Boolean(data.isActive),
@@ -172,19 +210,26 @@ export function subscribeVisitors(onChange: () => void) {
     bc = null
   }
 
-  visitorsRef.map().on((data: unknown) => {
-    const mapped = mapGunNode((data ?? {}) as Record<string, unknown>)
-    if (!mapped) return
-    writeLocal(mergeVisitors(readLocal(), mapped))
-    onChange()
-  })
+  void getVisitorsRef()
+    .then((ref) => {
+      if (!ref) return
+      ref.map().on((data: unknown) => {
+        const mapped = mapGunNode((data ?? {}) as Record<string, unknown>)
+        if (!mapped) return
+        writeLocal(mergeVisitors(readLocal(), mapped))
+        onChange()
+      })
+    })
+    .catch(() => undefined)
 
-  const timer = window.setInterval(onChange, 4000)
+  const timer = window.setInterval(onChange, 3000)
 
   return () => {
     window.removeEventListener('storage', onStorage)
     window.clearInterval(timer)
     bc?.close()
-    visitorsRef.map().off()
+    void getVisitorsRef()
+      .then((ref) => ref?.map().off())
+      .catch(() => undefined)
   }
 }
