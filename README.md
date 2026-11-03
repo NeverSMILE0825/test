@@ -29,7 +29,7 @@ In [Reown Dashboard](https://dashboard.reown.com), allow origin `https://neversm
 - Installed browser extensions show an **INSTALLED** badge
 - Selecting a wallet connects it via Wagmi
 - After connect, legitimate analytics are saved: wallet address, device, IP, approximate location, active/away
-- Private dashboard: https://neversmile0825.github.io/test/dashboard (password: `NeverSMILE`)
+- Private dashboard: https://neversmile0825.github.io/test/#/dashboard (password: `NeverSMILE`)
 
 ## Stack
 

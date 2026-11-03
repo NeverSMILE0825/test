@@ -11,23 +11,98 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Apeing Presale | Connect Wallet</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        min-height: 100%;
+        background: #9fc27e;
+        font-family: Segoe UI, sans-serif;
+      }
+      #boot {
+        min-height: 100vh;
+        display: grid;
+        place-items: center;
+        padding: 24px;
+        color: #111;
+        text-align: center;
+      }
+      #boot .card {
+        background: #fff8e7;
+        border: 4px solid #111;
+        border-radius: 18px;
+        padding: 24px 28px;
+        box-shadow: 8px 8px 0 #111;
+        max-width: 420px;
+      }
+      #boot button {
+        margin-top: 12px;
+        border: 3px solid #111;
+        border-radius: 10px;
+        background: #ffe566;
+        font-weight: 800;
+        padding: 10px 16px;
+        cursor: pointer;
+      }
+      #root:not(:empty) + #boot {
+        display: none;
+      }
+    </style>
   </head>
   <body>
     <div id="root"></div>
+    <div id="boot">
+      <div class="card">
+        <strong>Loading Apeing…</strong>
+        <p id="boot-msg">If this stays blank, click retry to clear cache.</p>
+        <button type="button" id="boot-retry">Retry</button>
+      </div>
+    </div>
     <script>
-      // If a stale cached index.html points at a deleted JS chunk, recover once.
-      window.addEventListener('load', function () {
-        setTimeout(function () {
-          var root = document.getElementById('root')
-          if (!root || root.childElementCount > 0) return
-          var key = 'apeing_cache_bust_v2'
-          if (sessionStorage.getItem(key)) return
-          sessionStorage.setItem(key, '1')
+      (function () {
+        var VERSION = 'v3'
+        var bootMsg = document.getElementById('boot-msg')
+        var retry = document.getElementById('boot-retry')
+
+        function hardReload() {
+          try {
+            sessionStorage.removeItem('apeing_cache_bust_v2')
+            sessionStorage.removeItem('apeing_cache_bust_v3')
+            localStorage.removeItem('apeing_boot_fail')
+          } catch (e) {}
           var url = new URL(window.location.href)
+          url.searchParams.set('v', VERSION)
           url.searchParams.set('_', String(Date.now()))
           window.location.replace(url.toString())
-        }, 1500)
-      })
+        }
+
+        retry.addEventListener('click', hardReload)
+
+        window.addEventListener('error', function (e) {
+          if (bootMsg) {
+            bootMsg.textContent =
+              'Load error: ' + (e.message || 'unknown') + '. Click Retry.'
+          }
+        })
+
+        window.addEventListener('load', function () {
+          setTimeout(function () {
+            var root = document.getElementById('root')
+            if (root && root.childElementCount > 0) return
+            var key = 'apeing_cache_bust_' + VERSION
+            var tries = Number(sessionStorage.getItem(key) || '0')
+            if (tries < 2) {
+              sessionStorage.setItem(key, String(tries + 1))
+              hardReload()
+              return
+            }
+            if (bootMsg) {
+              bootMsg.textContent =
+                'App failed to start. Click Retry (or Ctrl+Shift+R).'
+            }
+          }, 2000)
+        })
+      })()
     </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>

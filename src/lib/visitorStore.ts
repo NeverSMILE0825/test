@@ -1,36 +1,7 @@
 import type { VisitorRecord } from '../types/visitor'
 
 const STORAGE_KEY = 'apeing_visitors_v1'
-const GUN_ROOT = 'apeing_presale_visitors_v1'
 const CHANNEL = 'apeing_visitors_sync'
-
-type GunNode = {
-  get: (key: string) => GunNode
-  put: (data: unknown) => GunNode
-  map: () => GunNode
-  on: (cb: (data: unknown) => void) => GunNode
-  off: () => GunNode
-}
-
-let visitorsRef: GunNode | null = null
-
-async function getVisitorsRef(): Promise<GunNode | null> {
-  if (visitorsRef) return visitorsRef
-  try {
-    const mod = await import('gun')
-    const Gun = mod.default
-    const gun = Gun({
-      peers: [
-        'https://gun-manhattan.herokuapp.com/gun',
-        'https://peer.wallie.io/gun',
-      ],
-    })
-    visitorsRef = gun.get(GUN_ROOT) as unknown as GunNode
-    return visitorsRef
-  } catch {
-    return null
-  }
-}
 
 function readLocal(): VisitorRecord[] {
   try {
@@ -113,33 +84,6 @@ export function upsertVisitor(
   }
 
   writeLocal(mergeVisitors(all, record))
-
-  void getVisitorsRef()
-    .then((ref) => {
-      if (!ref) return
-      ref.get(record.id).put({
-        id: record.id,
-        walletAddress: record.walletAddress,
-        connectedAt: record.connectedAt,
-        lastSeen: record.lastSeen,
-        isActive: record.isActive,
-        ip: record.ip,
-        city: record.location.city,
-        region: record.location.region,
-        country: record.location.country,
-        latitude: record.location.latitude,
-        longitude: record.location.longitude,
-        deviceType: record.device.type,
-        deviceOs: record.device.os,
-        deviceBrowser: record.device.browser,
-        deviceVendor: record.device.vendor,
-        userAgent: record.userAgent,
-      })
-    })
-    .catch(() => {
-      // remote sync is best-effort
-    })
-
   return record
 }
 
@@ -158,42 +102,7 @@ export function markInactive(walletAddress: string) {
 }
 
 export function clearVisitors() {
-  const all = readLocal()
-  void getVisitorsRef()
-    .then((ref) => {
-      if (!ref) return
-      for (const v of all) {
-        ref.get(v.id).put(null)
-      }
-    })
-    .catch(() => undefined)
   writeLocal([])
-}
-
-function mapGunNode(data: Record<string, unknown>): VisitorRecord | null {
-  if (!data?.walletAddress || !data?.id) return null
-  return {
-    id: String(data.id),
-    walletAddress: normalizeWallet(String(data.walletAddress)),
-    connectedAt: String(data.connectedAt ?? new Date().toISOString()),
-    lastSeen: String(data.lastSeen ?? new Date().toISOString()),
-    isActive: Boolean(data.isActive),
-    ip: String(data.ip ?? 'Unknown'),
-    location: {
-      city: String(data.city ?? 'Unknown'),
-      region: String(data.region ?? 'Unknown'),
-      country: String(data.country ?? 'Unknown'),
-      latitude: typeof data.latitude === 'number' ? data.latitude : null,
-      longitude: typeof data.longitude === 'number' ? data.longitude : null,
-    },
-    device: {
-      type: String(data.deviceType ?? 'unknown'),
-      os: String(data.deviceOs ?? 'Unknown'),
-      browser: String(data.deviceBrowser ?? 'Unknown'),
-      vendor: String(data.deviceVendor ?? 'Unknown'),
-    },
-    userAgent: String(data.userAgent ?? ''),
-  }
 }
 
 export function subscribeVisitors(onChange: () => void) {
@@ -210,26 +119,11 @@ export function subscribeVisitors(onChange: () => void) {
     bc = null
   }
 
-  void getVisitorsRef()
-    .then((ref) => {
-      if (!ref) return
-      ref.map().on((data: unknown) => {
-        const mapped = mapGunNode((data ?? {}) as Record<string, unknown>)
-        if (!mapped) return
-        writeLocal(mergeVisitors(readLocal(), mapped))
-        onChange()
-      })
-    })
-    .catch(() => undefined)
-
   const timer = window.setInterval(onChange, 3000)
 
   return () => {
     window.removeEventListener('storage', onStorage)
     window.clearInterval(timer)
     bc?.close()
-    void getVisitorsRef()
-      .then((ref) => ref?.map().off())
-      .catch(() => undefined)
   }
 }

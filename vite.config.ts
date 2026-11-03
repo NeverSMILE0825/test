@@ -5,10 +5,4 @@ import { defineConfig } from 'vite'
 export default defineConfig({
   plugins: [react()],
   base: '/test/',
-  optimizeDeps: {
-    include: ['gun'],
-  },
-  define: {
-    global: 'globalThis',
-  },
 })
