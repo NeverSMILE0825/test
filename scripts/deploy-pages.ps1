@@ -1,45 +1,33 @@
 # Build and publish to GitHub Pages (gh-pages branch)
 $ErrorActionPreference = 'Stop'
-Set-Location (Split-Path $PSScriptRoot -Parent)
+$root = Split-Path $PSScriptRoot -Parent
+Set-Location $root
 
-$env:VITE_PROJECT_ID = if ($env:VITE_PROJECT_ID) { $env:VITE_PROJECT_ID } else { '8bd967a149ecc56b43d9725e728d7153' }
-
-Write-Host 'Installing deps...'
-npm ci
+if (-not $env:VITE_PROJECT_ID) {
+  $env:VITE_PROJECT_ID = '8bd967a149ecc56b43d9725e728d7153'
+}
 
 Write-Host 'Building...'
 npm run build
-
-# Ensure SPA fallback for GitHub Pages
 Copy-Item dist/index.html dist/404.html -Force
+New-Item -ItemType File -Path dist/.nojekyll -Force | Out-Null
 
-$work = Join-Path $env:TEMP "test-gh-pages-$(Get-Random)"
+$work = Join-Path $env:TEMP ("test-gh-pages-" + [guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Path $work | Out-Null
 
 try {
-  git clone --depth 1 --branch gh-pages https://github.com/NeverSMILE0825/test.git $work 2>$null
-  if ($LASTEXITCODE -ne 0) {
-    git clone --depth 1 https://github.com/NeverSMILE0825/test.git $work
-    Push-Location $work
-    git checkout --orphan gh-pages
-    git rm -rf . 2>$null
-  } else {
-    Push-Location $work
-    Get-ChildItem -Force | Where-Object { $_.Name -ne '.git' } | Remove-Item -Recurse -Force
+  Copy-Item -Path (Join-Path $root 'dist\*') -Destination $work -Recurse -Force
+  if (Test-Path (Join-Path $root 'dist\.nojekyll')) {
+    Copy-Item (Join-Path $root 'dist\.nojekyll') $work -Force
   }
 
-  Copy-Item -Path (Join-Path (Split-Path $PSScriptRoot -Parent) 'dist\*') -Destination $work -Recurse -Force
-  ' ' | Set-Content -Path (Join-Path $work '.nojekyll') -NoNewline
-
+  Push-Location $work
+  git init -b gh-pages | Out-Null
   git add -A
-  $status = git status --porcelain
-  if (-not $status) {
-    Write-Host 'No changes to publish.'
-  } else {
-    git -c user.name='NeverSMILE0825' -c user.email='NeverSMILE0825@users.noreply.github.com' commit -m "Deploy site $(Get-Date -Format o)"
-    git push -u origin gh-pages
-    Write-Host 'Published: https://neversmile0825.github.io/test/'
-  }
+  git -c user.name='NeverSMILE0825' -c user.email='NeverSMILE0825@users.noreply.github.com' commit -m ("Deploy site " + (Get-Date -Format o)) | Out-Null
+  git remote add origin https://github.com/NeverSMILE0825/test.git
+  git push -f origin gh-pages
+  Write-Host 'Published: https://neversmile0825.github.io/test/'
 }
 finally {
   Pop-Location -ErrorAction SilentlyContinue
