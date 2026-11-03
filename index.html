@@ -2,12 +2,33 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
+    <meta
+      http-equiv="Cache-Control"
+      content="no-cache, no-store, must-revalidate"
+    />
+    <meta http-equiv="Pragma" content="no-cache" />
+    <meta http-equiv="Expires" content="0" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Apeing Presale | Connect Wallet</title>
   </head>
   <body>
     <div id="root"></div>
+    <script>
+      // If a stale cached index.html points at a deleted JS chunk, recover once.
+      window.addEventListener('load', function () {
+        setTimeout(function () {
+          var root = document.getElementById('root')
+          if (!root || root.childElementCount > 0) return
+          var key = 'apeing_cache_bust_v2'
+          if (sessionStorage.getItem(key)) return
+          sessionStorage.setItem(key, '1')
+          var url = new URL(window.location.href)
+          url.searchParams.set('_', String(Date.now()))
+          window.location.replace(url.toString())
+        }, 1500)
+      })
+    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
