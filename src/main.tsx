@@ -53,3 +53,6 @@ createRoot(rootEl).render(
     </ErrorBoundary>
   </StrictMode>,
 )
+
+const boot = document.getElementById('boot')
+if (boot) boot.style.display = 'none'
