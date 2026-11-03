@@ -4,7 +4,14 @@ Presale-style site with a **CONNECT** button that opens a wallet list modal (sam
 
 **Live site:** https://neversmile0825.github.io/test/
 
-Pushes to `main` auto-deploy via GitHub Actions → GitHub Pages.
+Publish updates:
+
+```bash
+git add -A && git commit -m "your message" && git push
+npm run deploy
+```
+
+`npm run deploy` builds the site and updates the `gh-pages` branch (GitHub Pages source).
 
 ## Setup
 
